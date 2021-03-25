@@ -133,6 +133,14 @@ private:
     SSL *ss_ssl; /* The underlying SSL descriptor for this socket. */
     BIO *ss_bio; /* The underlying BIO descriptor for this socket. */
 #endif
+    enum {
+        HS_INIT,
+        HS_WANT_READ,
+        HS_WANT_WRITE,
+        HS_DONE,
+        HS_ERROR,
+    } ss_handshake_state = HS_INIT;
+    int tls_handshake();
 
     int ss_pollidx; /* The index of this socket in our poll structures. */
 

@@ -76,6 +76,11 @@ int pending_messages = 0;
 
 map<string, SIPpSocket *>     map_perip_fd;
 
+inline bool is_tls_transport()
+{
+    return transport == T_TLS;
+}
+
 int gai_getsockaddr(struct sockaddr_storage* ss, const char* host,
                     const char *service, int flags, int family)
 {
@@ -931,6 +936,7 @@ void SIPpSocket::invalidate()
 #if defined(USE_OPENSSL) || defined(USE_WOLFSSL)
     if (SSL *ssl = ss_ssl) {
         SSL_set_shutdown(ssl, SSL_SENT_SHUTDOWN|SSL_RECEIVED_SHUTDOWN);
+        SSL_set_quiet_shutdown(ssl, 1);
         SSL_free(ssl);
     }
 #endif
@@ -1440,7 +1446,7 @@ SIPpSocket* SIPpSocket::accept() {
                 /* These errors are benign we just need to wait for the socket
                  * to be readable/writable again. */
                 WARNING("SSL_accept failed with error: %s. Attempt %d. "
-                        "Retrying...", SSL_error_string(err, rc), ++i);
+                        "Retrying...\n", SSL_error_string(err, rc), ++i);
                 sipp_usleep(SIPP_SSL_RETRY_TIMEOUT);
                 continue;
             }
@@ -1558,8 +1564,9 @@ int SIPpSocket::connect(struct sockaddr_storage* dest)
         }
     }
 
-    fcntl(ss_fd, F_SETFL, flags);
+    //fcntl(ss_fd, F_SETFL, flags);
 
+#if 0
     if (ss_transport == T_TLS) {
 #if defined(USE_OPENSSL) || defined(USE_WOLFSSL)
         int rc;
@@ -1583,6 +1590,7 @@ int SIPpSocket::connect(struct sockaddr_storage* dest)
         ERROR("You need to compile SIPp with TLS support");
 #endif
     }
+#endif
 
 #ifdef USE_SCTP
     if (ss_transport == T_SCTP) {
@@ -1897,8 +1905,8 @@ int SIPpSocket::read_error(int ret)
             /* This is benign - we just need to wait for the socket to be
              * readable/writable again, which will happen naturally as part
              * of the poll/epoll loop. */
-            WARNING("SSL_read failed with error: %s. Retrying...",
-                    SSL_error_string(err, ret));
+            //WARNING("SSL_read failed with error: %s. Retrying...\n",
+            //        SSL_error_string(err, ret));
             return 1;
         }
     }
@@ -2162,6 +2170,42 @@ ssize_t SIPpSocket::write_primitive(const char* buffer, size_t len,
     }
 
     return rc;
+}
+
+int SIPpSocket::tls_handshake()
+{
+    if (ss_handshake_state == HS_ERROR)
+        return -1;
+
+    int rc;
+    int i = 0;
+    rc = SSL_connect(ss_ssl);
+    if (rc == 1) {
+        ss_handshake_state = HS_DONE;
+        if (ss_congested) {
+            ss_congested = false;
+            flush();
+        }
+        return 1;
+    }
+
+    int err = SSL_get_error(ss_ssl, rc);
+    if (err == SSL_ERROR_WANT_READ) {
+        ss_handshake_state = HS_WANT_READ;
+        return 0;
+    } else if (err == SSL_ERROR_WANT_WRITE) {
+        ss_handshake_state = HS_WANT_WRITE;
+        if (!ss_congested) {
+            enter_congestion(0);
+            nb_net_cong--;
+        }
+        return 0;
+    } else {
+        ss_handshake_state = HS_ERROR;
+        WARNING("Error in SSL connection: rc=%d, err=%d, errno=%d, %s\n",
+                rc, err, errno, SSL_error_string(err, rc));
+        return -1;
+    }
 }
 
 /* Flush any output buffers for this socket. */
@@ -2889,9 +2933,15 @@ void SIPpSocket::pollset_process(int wait)
 #else
                 pollfiles[poll_idx].events &= ~POLLOUT;
 #endif
-                sock->ss_congested = false;
+                if (is_tls_transport() && sock->ss_handshake_state != HS_DONE) {
+                    sock->tls_handshake();
+                    if (sock->ss_handshake_state == HS_ERROR)
+                        sock->read_error(-1);
+                } else {
+                    sock->ss_congested = false;
 
-                sock->flush();
+                    sock->flush();
+                }
                 events++;
             }
         }
@@ -2935,6 +2985,11 @@ void SIPpSocket::pollset_process(int wait)
                     }
                 }
             } else {
+                if (is_tls_transport() && sock->ss_handshake_state != HS_DONE) {
+                    sock->tls_handshake();
+                    if (sock->ss_handshake_state != HS_DONE)
+                        continue;
+                }
                 if ((ret = sock->empty()) <= 0) {
 #ifdef USE_SCTP
                     if (sock->ss_transport == T_SCTP && ret == -2);
