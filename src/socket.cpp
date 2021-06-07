@@ -2217,7 +2217,7 @@ int SIPpSocket::flush()
     while ((buf = ss_out)) {
         ssize_t size = buf->len - buf->offset;
         ret = write_primitive(buf->buf + buf->offset, size, &buf->addr);
-        TRACE_MSG("Wrote %d of %zu bytes in an output buffer.\n", ret, size);
+        // TRACE_MSG("Wrote %d of %zu bytes in an output buffer.\n", ret, size);
         if (ret == size) {
             /* Everything is great, throw away this buffer. */
             ss_out = buf->next;
@@ -2244,7 +2244,7 @@ int SIPpSocket::write(const char *buffer, ssize_t len, int flags, struct sockadd
 
     if (ss_out) {
         rc = flush();
-        TRACE_MSG("Attempted socket flush returned %d\r\n", rc);
+        // TRACE_MSG("Attempted socket flush returned %d\r\n", rc);
         if (rc < 0) {
             if ((errno == EWOULDBLOCK) && (flags & WS_BUFFER)) {
                 buffer_write(buffer, len, dest);
