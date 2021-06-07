@@ -126,6 +126,22 @@ const char *SSL_error_string(int ssl_error, int orig_ret)
 
 SSL* SSL_new_client()
 {
+/*
+wolfSSL takes a different approach to certificate verification than OpenSSL
+does. The default policy for the client is to verify the server, this means
+that if you don't load CAs to verify the server you'll get a connect error,
+no signer error to confirm failure (-188).
+
+If you want to mimic OpenSSL behavior of having SSL_connect succeed even if
+verifying the server fails and reducing security you can do this by calling:
+
+    wolfSSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, 0);
+
+before calling wolfSSL_new();. Though it's not recommended.
+*/
+#if defined(USE_WOLFSSL)
+    SSL_CTX_set_verify(sip_trp_ssl_ctx_client, SSL_VERIFY_NONE, 0);
+#endif
     return SSL_new(sip_trp_ssl_ctx_client);
 }
 

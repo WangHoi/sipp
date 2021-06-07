@@ -25,3 +25,8 @@
 	path = gmock
 	url = https://chromium.googlesource.com/external/googlemock
 	ignore = dirty
+[submodule "wolfssl"]
+	path = wolfssl
+	url = https://github.com/wolfSSL/wolfssl
+    branch = v4.7.0-stable
+	ignore = dirty
