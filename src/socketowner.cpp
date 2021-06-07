@@ -75,7 +75,9 @@ socketowner::socketowner()
 socketowner::~socketowner()
 {
     if (this->call_socket) {
-        dissociate_socket()->close();
+        auto socket = dissociate_socket();
+        --socket->ss_count;
+        socket->close();
     }
 }
 
