@@ -27,6 +27,6 @@
 	ignore = dirty
 [submodule "wolfssl"]
 	path = wolfssl
-	url = https://github.com/wolfSSL/wolfssl
+	url = https://github.com/wolfssl/wolfssl.git
     branch = v4.7.0-stable
 	ignore = dirty
