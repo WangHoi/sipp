@@ -76,8 +76,10 @@ socketowner::~socketowner()
 {
     if (this->call_socket) {
         auto socket = dissociate_socket();
-        --socket->ss_count;
-        socket->close();
+        if (socket != tcp_multiplex) {
+            --socket->ss_count;
+            socket->close();
+        }
     }
 }
 
