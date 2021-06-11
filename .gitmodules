@@ -30,3 +30,6 @@
 	url = https://github.com/wolfssl/wolfssl.git
     branch = v4.7.0-stable
 	ignore = dirty
+[submodule "boringssl"]
+	path = boringssl
+	url = https://github.com/google/boringssl.git

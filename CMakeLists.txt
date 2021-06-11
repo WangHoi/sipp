@@ -83,11 +83,12 @@ endif(NOT USE_PCAP)
 
 find_package(PkgConfig QUIET)  # import pkg_check_modules() and friends
 if(USE_SSL)
+#[[
   add_definitions("-DUSE_TLS" "-DUSE_WOLFSSL" "-DOPENSSL_ALL" "-DOPENSSL_EXTRA" "-DHAVE_AES_ECB" "-DWOLFSSL_AES_DIRECT")
   set(WOLFSSL_OCSP ON CACHE BOOL "" FORCE)
   set(WOLFSSL_AES ON CACHE BOOL "" FORCE)
   set(WOLFSSL_AES_DIRECT ON CACHE BOOL "" FORCE)
-  set(WOLFSSL_AESNI ON CACHE BOOL "" FORCE)
+  # set(WOLFSSL_AESNI ON CACHE BOOL "" FORCE)
   set(WOLFSSL_OPENSSLALL ON CACHE BOOL "" FORCE)
   set(WOLFSSL_OPENSSLEXTRA ON CACHE BOOL "" FORCE)
   set(WOLFSSL_HARDEN OFF CACHE BOOL "" FORCE)
@@ -96,10 +97,11 @@ if(USE_SSL)
   add_subdirectory(wolfssl)
   set(SSL_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/wolfssl")
   set(SSL_LIBRARIES wolfssl)
-
-  # SYSTEM wolfssl
-  # set(SSL_INCLUDE_DIRS "/usr/local/include/wolfssl")
-  # set(SSL_LIBRARIES wolfssl)
+]]
+  add_subdirectory(boringssl)
+  add_definitions("-DUSE_TLS" "-DUSE_OPENSSL")
+  set(SSL_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/boringssl/include")
+  set(SSL_LIBRARIES crypto ssl)
 endif()
 
 if(USE_PCAP)
