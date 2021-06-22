@@ -27,7 +27,7 @@ include_directories(
 option(BUILD_STATIC "Build a statically-linked binary" OFF)
 option(USE_SSL "Build with SIPS support" ON)
 option(USE_SCTP "Build with SCTP support" OFF)
-option(USE_PCAP "Build with PCAP playback support" OFF)
+option(USE_PCAP "Build with PCAP playback support" ON)
 option(USE_GSL "Build with improved statistical support" ON)
 
 file(GLOB all_SRCS
