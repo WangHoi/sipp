@@ -901,7 +901,11 @@ void call::init(scenario * call_scenario, SIPpSocket *socket, struct sockaddr_st
 
     paused_until = 0;
 
-    call_port = 0;
+    if ((transport == T_TLS || transport == T_TCP) && socket) {
+        call_port = socket->ss_port;
+    } else {
+        call_port = 0;
+    }
     comp_state = NULL;
 
     start_time = clock_tick;
