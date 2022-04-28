@@ -1,0 +1,17 @@
+{
+    "files.associations": {
+        "*.tcc": "cpp",
+        "complex": "cpp",
+        "fstream": "cpp",
+        "*.ipp": "cpp",
+        "config.h": "c",
+        "numeric": "cpp",
+        "macro_util.h": "c",
+        "stun.h": "c"
+    },
+    "cmake.generator": "Unix Makefiles",
+    "cmake.preferredGenerators": [
+        "Unix Makefiles",
+        "Ninja",
+    ]
+}

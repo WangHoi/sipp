@@ -176,8 +176,11 @@ public:
     void setDoubleValue  (double         P_value);  /* assign value specific function  */
     void setStringValue  (char *         P_value);  /* strcmp value specific function  */
 #ifdef PCAPPLAY
+    bool hasPcapArgs() const;
     void setPcapArgs(const char* P_value);          /* send_packets specific function */
     void setPcapArgs     (pcap_pkts   *  P_value);  /* send_packets specific function */
+    void setIceUsername  (const char*    P_value);
+    void setIcePassword  (const char*    P_value);
 #endif
 #ifdef RTP_STREAM
     void setRTPEchoActInfo(const char* P_value);  /* parses rtp echo params from string */
@@ -235,6 +238,8 @@ private:
 #ifdef PCAPPLAY
     /* pcap specific member */
     pcap_pkts *    M_pcapArgs;
+    char *         M_ice_username;
+    char *         M_ice_password;
 #endif
 #ifdef RTP_STREAM
     rtpecho_actinfo_t M_rtpecho_actinfo;

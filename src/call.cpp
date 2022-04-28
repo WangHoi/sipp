@@ -6158,6 +6158,13 @@ call::T_ActionResult call::executeAction(const char* msg, message* curmsg)
                 play_args->last_seq_no += parse_dtmf_play_args(digits, play_args->pcap, play_args->last_seq_no);
                 play_args->free_pcap_when_done = 1;
             } else {
+                if (!currentAction->hasPcapArgs()) {
+                    if (currentAction->getMessage(1) && currentAction->getMessage(2)) {
+                        currentAction->setIceUsername(createSendingMessage(currentAction->getMessage(1), -2 /* do not add crlf */));
+                        currentAction->setIcePassword(createSendingMessage(currentAction->getMessage(2), -2 /* do not add crlf */));
+                    }
+                    currentAction->setPcapArgs(currentAction->getStringValue());
+                }
                 play_args->pcap = currentAction->getPcapPkts();
                 play_args->free_pcap_when_done = 0;
             }

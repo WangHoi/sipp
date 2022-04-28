@@ -114,10 +114,10 @@ static char* find_file(const char* filename)
     return fullpath;
 }
 
-int parse_play_args(const char* filename, pcap_pkts* pkts)
+int parse_play_args(const char* filename, pcap_pkts* pkts, const char* ice_username, const char* ice_password)
 {
     pkts->file = find_file(filename);
-    prepare_pkts(pkts->file, pkts);
+    prepare_pkts(pkts->file, pkts, ice_username, ice_password);
     return 1;
 }
 
