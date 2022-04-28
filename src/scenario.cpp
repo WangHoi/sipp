@@ -1661,11 +1661,10 @@ void scenario::parseAction(CActions *actions)
                 if ((cptr = xp_get_value("ice_password"))) {
                     tmpAction->setMessage(cptr, 2);
                 }
-                //tmpAction->setPcapArgs(ptr);
-                tmpAction->setStringValue(ptr);
+                tmpAction->setPcapArgs(ptr);
                 tmpAction->setActionType(CAction::E_AT_PLAY_PCAP_AUDIO);
                 hasMedia = 1;
-                //free(ptr);
+                free(ptr);
             } else if ((ptr = xp_get_keyword_value("play_pcap_image"))) {
                 tmpAction->setPcapArgs(ptr);
                 tmpAction->setActionType(CAction::E_AT_PLAY_PCAP_IMAGE);

@@ -51,15 +51,6 @@ typedef struct _ether_type_hdr {
     uint16_t ether_type; /* we only need the type, so we can determine, if the next header is IPv4 or IPv6 */
 } ether_type_hdr;
 
-struct stunpacket {
-    struct udphdr udp;
-    union {
-        stun_msg_hdr_t stun;
-        uint8_t _data[1400];
-    };
-};
-static int fill_stun_binding_request(struct stunpacket* packet, struct udphdr* udphdr, const char* ice_username, const char* ice_password);
-
 int check(uint16_t *buffer, int len)
 {
     int sum;
@@ -191,7 +182,7 @@ size_t get_ethertype_offset(int link, const uint8_t* pktdata)
 
 /* prepare a pcap file
  */
-int prepare_pkts(const char* file, pcap_pkts* pkts, const char* ice_username, const char* ice_password)
+int prepare_pkts(const char* file, pcap_pkts* pkts)
 {
     pcap_t* pcap;
 #ifdef HAVE_PCAP_NEXT_EX
@@ -212,11 +203,6 @@ int prepare_pkts(const char* file, pcap_pkts* pkts, const char* ice_username, co
     struct ip* iphdr;
     struct ip6_hdr* ip6hdr;
     struct udphdr* udphdr;
-
-    int enable_stun_pkts = (ice_username != NULL) && (ice_password != NULL);
-    const int FIRST_STUN_INTERVAL_PKTS = 100;
-    const int STUN_INTERVAL_PKTS = 600;
-    int stun_count = 0;
 
     pkts->pkts = NULL;
 
@@ -293,58 +279,6 @@ int prepare_pkts(const char* file, pcap_pkts* pkts, const char* ice_username, co
         if (base > ntohs(udphdr->uh_dport))
             base = ntohs(udphdr->uh_dport);
         n_pkts++;
-
-        /* generate STUN packets */
-        if (enable_stun_pkts) {
-            int gen_pkt = 0;
-            if (stun_count == 0) {
-                gen_pkt = 1;
-            } else if (stun_count == 1) {
-                if (n_pkts == FIRST_STUN_INTERVAL_PKTS + stun_count)
-                    gen_pkt = 1;
-            } else {
-                if (n_pkts == FIRST_STUN_INTERVAL_PKTS + 1 + (STUN_INTERVAL_PKTS + 1) * (stun_count - 1))
-                    gen_pkt = 1;
-            }
-
-            if (gen_pkt) {
-            #if 1
-                /* BUG: inefficient */
-                pkts->pkts = (pcap_pkt *)realloc(pkts->pkts, sizeof(*(pkts->pkts)) * (n_pkts + 1));
-                if (!pkts->pkts)
-                    ERROR("Can't re-allocate memory for pcap pkt");
-                pkt_index = pkts->pkts + n_pkts;
-                pkt_index->ts = pkthdr->ts;
-
-                struct stunpacket stun_packet;
-                int pktlen = fill_stun_binding_request(&stun_packet, udphdr, ice_username, ice_password);
-                pkt_index->pktlen = pktlen;
-                pkt_index->data = (unsigned char *) malloc(pktlen); /* BUG: inefficient */
-                if (!pkt_index->data)
-                    ERROR("Can't allocate memory for pcap pkt data");
-                memcpy(pkt_index->data, &stun_packet, pktlen);
-
-                /* compute a partial udp checksum */
-                /* not including port that will be changed */
-                /* when sending RTP */
-                pkt_index->partial_check = check(&stun_packet.udp.uh_ulen, pktlen - 4) + ntohs(IPPROTO_UDP + pktlen);
-                if (max_length < pktlen)
-                    max_length = pktlen;
-            #else
-                /* BUG: inefficient */
-                pkts->pkts = (pcap_pkt *)realloc(pkts->pkts, sizeof(*(pkts->pkts)) * (n_pkts + 1));
-                if (!pkts->pkts)
-                    ERROR("Can't re-allocate memory for pcap pkt");
-                pkt_index = pkts->pkts + n_pkts;
-                pkt_index->ts = pkthdr->ts;
-                pkt_index->pktlen = 0;
-                pkt_index->data = NULL;
-                pkt_index->prepare_on_exec = 1;
-            #endif
-                n_pkts++;
-                stun_count++;
-            }
-        }
     }
     pkts->max = pkts->pkts + n_pkts;
     pkts->max_length = max_length;
@@ -475,28 +409,6 @@ static void fill_default_noop(struct nooppacket* nooppacket, int seqno, int ts)
     nooppacket->rtp.payload_type = 0x61; /* 97 for noop */
     nooppacket->noop.request_rtcp = 0;
     nooppacket->noop.reserved = 0;
-}
-
-/*static*/
-int fill_stun_binding_request(struct stunpacket* packet, struct udphdr* udphdr, const char* ice_username, const char* ice_password)
-{
-    uint8_t tsx_id[12];
-    int i;
-    u_long pktlen;
-
-    for (i = 0; i < 12; ++i) {
-        tsx_id[i] = (uint8_t)(rand() % 256);
-    }
-    stun_msg_hdr_init(&packet->stun, STUN_BINDING_REQUEST, tsx_id);
-    stun_attr_varsize_add(&packet->stun, STUN_ATTR_USERNAME, ice_username, strlen(ice_username), ' ');
-    stun_attr_msgint_add(&packet->stun, ice_password, strlen(ice_password));
-    stun_attr_fingerprint_add(&packet->stun);
-    pktlen = sizeof(packet->udp) + (int)stun_msg_len(&packet->stun);
-    memcpy(&packet->udp, udphdr, sizeof(struct udphdr));
-    packet->udp.uh_ulen = htons(pktlen);
-    packet->udp.uh_sum = 0;
-
-    return pktlen;
 }
 
 static void prepare_dtmf_digit_start(

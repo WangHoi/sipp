@@ -153,11 +153,7 @@ void CAction::printInfo(char* buf, int len)
         snprintf(buf, len, "Type[%d] - toDouble varId[%s]", M_action, display_scenario->allocVars->getName(M_varId));
 #ifdef PCAPPLAY
     } else if ((M_action == E_AT_PLAY_PCAP_AUDIO) || (M_action == E_AT_PLAY_PCAP_IMAGE) || (M_action == E_AT_PLAY_PCAP_VIDEO)) {
-        if (M_ice_username && M_ice_password) {
-            snprintf(buf, len, "Type[%d] - file[%s] - ice username [%s] password [%s]", M_action, M_pcapArgs->file, M_ice_username, M_ice_password);
-        } else {
-            snprintf(buf, len, "Type[%d] - file[%s]", M_action, M_pcapArgs->file);
-        }
+        snprintf(buf, len, "Type[%d] - file[%s]", M_action, M_pcapArgs->file);
     } else if (M_action == E_AT_PLAY_DTMF) {
         snprintf(buf, len, "Type[%d] - play DTMF digits [%s]", M_action, M_message_str[0]);
 #endif
@@ -585,25 +581,13 @@ void CAction::setPcapArgs(const char* P_value)
 
     if(P_value != NULL) {
         M_pcapArgs = (pcap_pkts *) malloc(sizeof(*M_pcapArgs));
-        if (parse_play_args(P_value, M_pcapArgs, M_ice_username, M_ice_password) == -1) {
+        if (parse_play_args(P_value, M_pcapArgs) == -1) {
             ERROR("Play pcap error");
         }
         if (access(M_pcapArgs->file, F_OK)) {
             ERROR("Cannot read file %s", M_pcapArgs->file);
         }
     }
-}
-
-void CAction::setIceUsername(const char *P_value)
-{
-    free(M_ice_username);
-    M_ice_username = strdup(P_value);
-}
-
-void CAction::setIcePassword(const char *P_value)
-{
-    free(M_ice_password);
-    M_ice_password = strdup(P_value);
 }
 
 #endif
@@ -1040,8 +1024,6 @@ CAction::CAction(scenario *scenario)
     M_distribution = NULL;
 #ifdef PCAPPLAY
     M_pcapArgs     = NULL;
-    M_ice_username = NULL;
-    M_ice_password = NULL;
 #endif
 
 #ifdef RTP_STREAM
@@ -1077,14 +1059,6 @@ CAction::~CAction()
     if (M_pcapArgs != NULL) {
         // free_pcaps(M_pcapArgs);
         M_pcapArgs = NULL;
-    }
-    if(M_ice_username != NULL) {
-        free(M_ice_username);
-        M_ice_username = NULL;
-    }
-    if(M_ice_password != NULL) {
-        free(M_ice_password);
-        M_ice_password = NULL;
     }
 #endif
     if (M_regExpSet) {

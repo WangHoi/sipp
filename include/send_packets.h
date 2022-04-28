@@ -114,6 +114,8 @@ typedef struct {
     /* Used in send_packets thread */
     struct sockaddr_storage to;
     struct sockaddr_storage from;
+    char* ice_username;
+    char* ice_password;
 
     /* non-zero if the thread should destroy the *pcap when done playing or aborted */
     int free_pcap_when_done;
@@ -124,7 +126,7 @@ typedef struct {
 extern "C"
 {
 #endif
-    int parse_play_args(const char*, pcap_pkts*, const char*, const char*);
+    int parse_play_args(const char*, pcap_pkts*);
     int parse_dtmf_play_args(const char*, pcap_pkts*, uint16_t start_seq_no);
     void free_pcaps(pcap_pkts* pkts);
     void send_packets(play_args_t*);

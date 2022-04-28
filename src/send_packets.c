@@ -51,6 +51,7 @@
 #include "send_packets.h"
 #include "prepare_pcap.h"
 #include "config.h"
+#include "ice/stun.h"
 
 #ifndef HAVE_UDP_UH_PREFIX
 #define uh_ulen len
@@ -63,6 +64,9 @@ extern char* scenario_path;
 extern volatile unsigned long rtp_pckts_pcap;
 extern volatile unsigned long rtp_bytes_pcap;
 extern bool media_ip_is_ipv6;
+
+static int fill_stun_binding_request(void* buffer, struct udphdr* udphdr,
+    const char* ice_username, const char* ice_password);
 
 inline void
 timerdiv(struct timeval* tvp, float div)
@@ -114,10 +118,10 @@ static char* find_file(const char* filename)
     return fullpath;
 }
 
-int parse_play_args(const char* filename, pcap_pkts* pkts, const char* ice_username, const char* ice_password)
+int parse_play_args(const char* filename, pcap_pkts* pkts)
 {
     pkts->file = find_file(filename);
-    prepare_pkts(pkts->file, pkts, ice_username, ice_password);
+    prepare_pkts(pkts->file, pkts);
     return 1;
 }
 
@@ -167,6 +171,14 @@ void send_packets_pcap_cleanup(void* arg)
         free(play_args->pcap);
         play_args->pcap = NULL;
     }
+    if (play_args->ice_username) {
+        free(play_args->ice_username);
+        play_args->ice_username = NULL;
+    }
+    if (play_args->ice_password) {
+        free(play_args->ice_password);
+        play_args->ice_password = NULL;
+    }
 }
 
 void send_packets(play_args_t* play_args)
@@ -193,6 +205,11 @@ void send_packets(play_args_t* play_args)
 #ifndef MSG_DONTWAIT
     int fd_flags;
 #endif
+    int enable_stun_pkts = (play_args->ice_username != NULL) && (play_args->ice_password != NULL);
+    const int FIRST_STUN_INTERVAL_PKTS = 100;
+    const int STUN_INTERVAL_PKTS = 600;
+    int stun_count = 0;
+    int n_pkts = 0;
 
     if (media_ip_is_ipv6) {
         sock = socket(PF_INET6, SOCK_RAW, IPPROTO_UDP);
@@ -307,10 +324,75 @@ void send_packets(play_args_t* play_args)
             goto pop1;
         }
 
+        /* generate STUN packets */
+        n_pkts++;
+        if (enable_stun_pkts) {
+            int gen_pkt = 0;
+            if (stun_count == 0) {
+                gen_pkt = 1;
+            } else if (stun_count == 1) {
+                if (n_pkts == FIRST_STUN_INTERVAL_PKTS + stun_count)
+                    gen_pkt = 1;
+            } else {
+                if (n_pkts == FIRST_STUN_INTERVAL_PKTS + 1 + (STUN_INTERVAL_PKTS + 1) * (stun_count - 1))
+                    gen_pkt = 1;
+            }
+
+            if (gen_pkt) {
+                int pktlen = fill_stun_binding_request((char*)udp + sizeof(struct udphdr), udp,
+                    play_args->ice_username, play_args->ice_password);
+                udp->uh_ulen = htons(pktlen);
+                udp->uh_sum = 0;
+                int partial_check = check((uint16_t*)&udp->uh_ulen, pktlen - 4) + ntohs(IPPROTO_UDP + pktlen);
+                if (!media_ip_is_ipv6) {
+                    temp_sum = checksum_carry(
+                            partial_check +
+                            check((uint16_t *) &(((struct sockaddr_in *)(void *) from)->sin_addr.s_addr), 4) +
+                            check((uint16_t *) &(((struct sockaddr_in *)(void *) to)->sin_addr.s_addr), 4) +
+                            check((uint16_t *) &udp->uh_sport, 4));
+                } else {
+                    temp_sum = checksum_carry(
+                            partial_check +
+                            check((uint16_t *) &(from6.sin6_addr.s6_addr), 16) +
+                            check((uint16_t *) &(to6.sin6_addr.s6_addr), 16) +
+                            check((uint16_t *) &udp->uh_sport, 4));
+                }
+            #if !defined(_HPUX_LI) && defined(__HPUX)
+                udp->uh_sum = (temp_sum>>16)+((temp_sum & 0xffff)<<16);
+            #else
+                udp->uh_sum = temp_sum;
+            #endif
+            
+            #ifdef MSG_DONTWAIT
+                if (!media_ip_is_ipv6) {
+                    ret = sendto(sock, buffer, pktlen, MSG_DONTWAIT,
+                                (struct sockaddr *)to, sizeof(struct sockaddr_in));
+                } else {
+                    ret = sendto(sock, buffer, pktlen, MSG_DONTWAIT,
+                                (struct sockaddr *)&to6, sizeof(struct sockaddr_in6));
+                }
+            #else
+                if (!media_ip_is_ipv6) {
+                    ret = sendto(sock, buffer, pktlen, 0,
+                                (struct sockaddr *)to, sizeof(struct sockaddr_in));
+                } else {
+                    ret = sendto(sock, buffer, pktlen, 0,
+                                (struct sockaddr *)&to6, sizeof(struct sockaddr_in6));
+                }
+            #endif
+                if (ret < 0) {
+                    WARNING("send_packets.c: sendto failed with error: %s", strerror(errno));
+                    goto pop1;
+                }
+                n_pkts++;
+                stun_count++;
+            }
+        }
+
         rtp_pckts_pcap++;
         rtp_bytes_pcap += pkt_index->pktlen - sizeof(*udp);
         memcpy (&last, &(pkt_index->ts), sizeof(struct timeval));
-        pkt_index++;
+        pkt_index++;               
     }
 
     /* Closing the socket is handled by pthread_cleanup_push()/pthread_cleanup_pop() */
@@ -364,4 +446,21 @@ void do_sleep(struct timeval* time, struct timeval* last,
 
         while ((nanosleep (&sleep, &sleep) == -1) && (errno == -EINTR));
     }
+}
+
+int fill_stun_binding_request(void* buf, struct udphdr* udphdr, const char* ice_username, const char* ice_password)
+{
+    struct stun_msg_hdr_t* hdr = buf;
+    uint8_t tsx_id[12];
+    int i;
+    u_long pktlen;
+
+    for (i = 0; i < 12; ++i) {
+        tsx_id[i] = (uint8_t)(rand() % 256);
+    }
+    stun_msg_hdr_init(hdr, STUN_BINDING_REQUEST, tsx_id);
+    stun_attr_varsize_add(hdr, STUN_ATTR_USERNAME, ice_username, strlen(ice_username), ' ');
+    stun_attr_msgint_add(hdr, ice_password, strlen(ice_password));
+    stun_attr_fingerprint_add(hdr);
+    return (int)sizeof(struct udphdr) + stun_msg_len(hdr);
 }
